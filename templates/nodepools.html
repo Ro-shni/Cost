@@ -1,0 +1,458 @@
+{% extends "base.html" %}
+
+{% block title %}Node Pools Analysis - Kubernetes Resource Dashboard{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="display-5">
+            <i class="fas fa-layer-group text-info me-3"></i>
+            Node Pools Analysis
+        </h1>
+        <p class="lead text-muted">Aggregated resource efficiency metrics by node pool</p>
+    </div>
+</div>
+
+<!-- Search Section -->
+<div class="search-container">
+    <div class="row">
+        <div class="col-lg-8 col-md-8 mb-3">
+            <label for="searchInput" class="form-label fw-bold">Search Node Pools</label>
+            <input type="text" id="searchInput" class="form-control" placeholder="Search by node pool name...">
+        </div>
+        <div class="col-lg-2 col-md-4 mb-3">
+            <label class="form-label">&nbsp;</label>
+            <button id="searchBtn" class="btn btn-primary w-100">
+                <i class="fas fa-search me-1"></i>Search
+            </button>
+        </div>
+        <div class="col-lg-2 col-md-4 mb-3">
+            <label class="form-label">&nbsp;</label>
+            <button id="resetBtn" class="btn btn-outline-secondary w-100">
+                <i class="fas fa-undo me-1"></i>Reset
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Summary Statistics -->
+<div class="row mb-4" id="statsCards">
+    <div class="col-lg-3 col-md-6">
+        <div class="card text-center border-primary">
+            <div class="card-body">
+                <h4 class="text-primary" id="totalNodepools">-</h4>
+                <p class="card-text">Total Node Pools</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6">
+        <div class="card text-center border-success">
+            <div class="card-body">
+                <h4 class="text-success" id="totalNodes">-</h4>
+                <p class="card-text">Total Nodes</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6">
+        <div class="card text-center border-warning">
+            <div class="card-body">
+                <h4 class="text-warning" id="totalCpuWaste">-</h4>
+                <p class="card-text">Total CPU Waste</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6">
+        <div class="card text-center border-danger">
+            <div class="card-body">
+                <h4 class="text-danger" id="totalMemWaste">-</h4>
+                <p class="card-text">Total Memory Waste</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Top Waste Charts -->
+<div class="row mb-4">
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Top CPU Waste by Node Pool</h5>
+            </div>
+            <div class="card-body">
+                <div id="cpuWasteChart" style="height: 400px;"></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Top Memory Waste by Node Pool</h5>
+            </div>
+            <div class="card-body">
+                <div id="memWasteChart" style="height: 400px;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Results Table -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">
+            <i class="fas fa-table me-2"></i>Node Pool Details
+        </h5>
+        <div>
+            <button id="exportBtn" class="btn btn-outline-primary btn-sm">
+                <i class="fas fa-download me-1"></i>Export
+            </button>
+        </div>
+    </div>
+    <div class="card-body">
+        <div id="loadingSpinner" class="loading">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-3">Loading node pools data...</p>
+        </div>
+        
+        <div id="tableContainer" style="display: none;">
+            <table id="nodepoolsTable" class="table table-striped table-hover">
+                <thead>
+                    <tr>
+                        <th>Node Pool</th>
+                        <th>Nodes</th>
+                        <th>Pods</th>
+                        <th>CPU Unutilized</th>
+                        <th>Memory Unutilized (GB)</th>
+                        <th>CPU Over-requested</th>
+                        <th>Memory Over-requested (GB)</th>
+                        <th>Pod CPU Waste</th>
+                        <th>Pod Memory Waste (GB)</th>
+                        <th>Total Waste Potential</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                </tbody>
+            </table>
+        </div>
+        
+        <div id="noDataMessage" style="display: none;" class="text-center py-5">
+            <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+            <h5 class="text-muted">No node pools found</h5>
+            <p class="text-muted">Try adjusting your search criteria</p>
+        </div>
+    </div>
+</div>
+
+<!-- Node Pool Detail Modal -->
+<div class="modal fade" id="nodepoolDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-layer-group me-2"></i>Node Pool Details
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="nodepoolDetailContent">
+                    <!-- Content will be loaded dynamically -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let nodepoolsTable;
+let currentData = [];
+
+$(document).ready(function() {
+    // Initialize DataTable
+    nodepoolsTable = $('#nodepoolsTable').DataTable({
+        pageLength: 25,
+        responsive: true,
+        order: [[9, 'desc']], // Sort by total waste potential
+        columnDefs: [
+            { targets: [3, 4, 5, 6, 7, 8], render: function(data) { return data ? formatNumber(data) : '-'; }},
+            { targets: [9], render: function(data, type, row) { 
+                const cpuWaste = (row[3] || 0) + (row[7] || 0);
+                const memWaste = (row[4] || 0) + (row[8] || 0);
+                return formatNumber(cpuWaste) + ' CPU, ' + formatNumber(memWaste) + ' GB';
+            }},
+            { targets: [10], orderable: false }
+        ]
+    });
+
+    // Load initial data
+    loadNodepoolsData();
+    
+    // Event handlers
+    $('#searchBtn').click(function() {
+        loadNodepoolsData();
+    });
+    
+    $('#resetBtn').click(function() {
+        $('#searchInput').val('');
+        loadNodepoolsData();
+    });
+    
+    $('#searchInput').keypress(function(e) {
+        if (e.which === 13) {
+            loadNodepoolsData();
+        }
+    });
+    
+    // Export functionality
+    $('#exportBtn').click(function() {
+        exportData();
+    });
+});
+
+function loadNodepoolsData() {
+    $('#loadingSpinner').show();
+    $('#tableContainer').hide();
+    $('#noDataMessage').hide();
+    
+    const params = {
+        search: $('#searchInput').val()
+    };
+    
+    $.get('/api/nodepools', params, function(data) {
+        currentData = data.data;
+        
+        if (data.data.length === 0) {
+            $('#loadingSpinner').hide();
+            $('#noDataMessage').show();
+            updateStats([]);
+            updateCharts([]);
+            return;
+        }
+        
+        // Clear existing data
+        nodepoolsTable.clear();
+        
+        // Add new data
+        data.data.forEach(function(nodepool) {
+            const actions = `
+                <button class="btn btn-sm btn-outline-primary" onclick="showNodepoolDetails('${nodepool.nodepool}')">
+                    <i class="fas fa-eye"></i>
+                </button>
+            `;
+            
+            nodepoolsTable.row.add([
+                nodepool.nodepool || '-',
+                nodepool.node_count || 0,
+                nodepool.pod_count || 0,
+                nodepool.cpu_unutilized || 0,
+                nodepool.mem_unutilized_GB || 0,
+                nodepool.cpu_over_requested || 0,
+                nodepool.mem_over_requested_GB || 0,
+                nodepool.pod_cpu_waste || 0,
+                nodepool.pod_mem_waste_GB || 0,
+                '', // Total waste potential (calculated in columnDefs)
+                actions
+            ]);
+        });
+        
+        nodepoolsTable.draw();
+        updateStats(data.data);
+        updateCharts(data.data);
+        
+        $('#loadingSpinner').hide();
+        $('#tableContainer').show();
+        
+    }).fail(function() {
+        $('#loadingSpinner').hide();
+        $('#noDataMessage').show();
+        updateStats([]);
+        updateCharts([]);
+    });
+}
+
+function updateStats(data) {
+    if (data.length === 0) {
+        $('#totalNodepools').text('-');
+        $('#totalNodes').text('-');
+        $('#totalCpuWaste').text('-');
+        $('#totalMemWaste').text('-');
+        return;
+    }
+    
+    const totalNodepools = data.length;
+    const totalNodes = data.reduce((sum, np) => sum + (np.node_count || 0), 0);
+    const totalCpuWaste = data.reduce((sum, np) => sum + (np.cpu_unutilized || 0) + (np.pod_cpu_waste || 0), 0);
+    const totalMemWaste = data.reduce((sum, np) => sum + (np.mem_unutilized_GB || 0) + (np.pod_mem_waste_GB || 0), 0);
+    
+    $('#totalNodepools').text(totalNodepools.toLocaleString());
+    $('#totalNodes').text(totalNodes.toLocaleString());
+    $('#totalCpuWaste').text(formatNumber(totalCpuWaste) + ' cores');
+    $('#totalMemWaste').text(formatNumber(totalMemWaste) + ' GB');
+}
+
+function updateCharts(data) {
+    if (data.length === 0) {
+        $('#cpuWasteChart').html('<p class="text-center text-muted">No data available</p>');
+        $('#memWasteChart').html('<p class="text-center text-muted">No data available</p>');
+        return;
+    }
+    
+    // Sort by waste and take top 15
+    const cpuWasteData = data
+        .map(np => ({
+            name: np.nodepool,
+            waste: (np.cpu_unutilized || 0) + (np.pod_cpu_waste || 0)
+        }))
+        .sort((a, b) => b.waste - a.waste)
+        .slice(0, 15);
+    
+    const memWasteData = data
+        .map(np => ({
+            name: np.nodepool,
+            waste: (np.mem_unutilized_GB || 0) + (np.pod_mem_waste_GB || 0)
+        }))
+        .sort((a, b) => b.waste - a.waste)
+        .slice(0, 15);
+    
+    // CPU Waste Chart
+    const cpuChart = [{
+        x: cpuWasteData.map(d => d.waste),
+        y: cpuWasteData.map(d => d.name),
+        type: 'bar',
+        orientation: 'h',
+        marker: { color: '#e74c3c' }
+    }];
+    
+    const cpuLayout = {
+        title: 'Top 15 Node Pools by CPU Waste',
+        xaxis: { title: 'CPU Cores Wasted' },
+        margin: { l: 200, r: 50, t: 50, b: 50 }
+    };
+    
+    Plotly.newPlot('cpuWasteChart', cpuChart, cpuLayout, {responsive: true});
+    
+    // Memory Waste Chart
+    const memChart = [{
+        x: memWasteData.map(d => d.waste),
+        y: memWasteData.map(d => d.name),
+        type: 'bar',
+        orientation: 'h',
+        marker: { color: '#3498db' }
+    }];
+    
+    const memLayout = {
+        title: 'Top 15 Node Pools by Memory Waste',
+        xaxis: { title: 'Memory (GB) Wasted' },
+        margin: { l: 200, r: 50, t: 50, b: 50 }
+    };
+    
+    Plotly.newPlot('memWasteChart', memChart, memLayout, {responsive: true});
+}
+
+function showNodepoolDetails(nodepoolName) {
+    const nodepool = currentData.find(np => np.nodepool === nodepoolName);
+    if (!nodepool) return;
+    
+    const totalCpuWaste = (nodepool.cpu_unutilized || 0) + (nodepool.pod_cpu_waste || 0);
+    const totalMemWaste = (nodepool.mem_unutilized_GB || 0) + (nodepool.pod_mem_waste_GB || 0);
+    
+    const content = `
+        <div class="row">
+            <div class="col-md-6">
+                <h6 class="fw-bold">Basic Information</h6>
+                <table class="table table-sm">
+                    <tr><td><strong>Node Pool:</strong></td><td>${nodepool.nodepool}</td></tr>
+                    <tr><td><strong>Total Nodes:</strong></td><td>${nodepool.node_count || 0}</td></tr>
+                    <tr><td><strong>Total Pods:</strong></td><td>${nodepool.pod_count || 0}</td></tr>
+                    <tr><td><strong>Average CPU Utilization:</strong></td><td>${(nodepool.cpu_utilization_pct || 0).toFixed(1)}%</td></tr>
+                    <tr><td><strong>Average Memory Utilization:</strong></td><td>${(nodepool.mem_utilization_pct || 0).toFixed(1)}%</td></tr>
+                </table>
+            </div>
+            <div class="col-md-6">
+                <h6 class="fw-bold">Resource Waste (Node Level)</h6>
+                <table class="table table-sm">
+                    <tr><td><strong>CPU Unutilized:</strong></td><td class="text-warning">${formatNumber(nodepool.cpu_unutilized || 0)} cores</td></tr>
+                    <tr><td><strong>Memory Unutilized:</strong></td><td class="text-warning">${formatNumber(nodepool.mem_unutilized_GB || 0)} GB</td></tr>
+                    <tr><td><strong>CPU Over-requested:</strong></td><td class="text-danger">${formatNumber(nodepool.cpu_over_requested || 0)} cores</td></tr>
+                    <tr><td><strong>Memory Over-requested:</strong></td><td class="text-danger">${formatNumber(nodepool.mem_over_requested_GB || 0)} GB</td></tr>
+                </table>
+            </div>
+        </div>
+        <div class="row mt-3">
+            <div class="col-md-6">
+                <h6 class="fw-bold">Pod Optimization Potential</h6>
+                <table class="table table-sm">
+                    <tr><td><strong>Pod CPU Waste:</strong></td><td class="text-info">${formatNumber(nodepool.pod_cpu_waste || 0)} cores</td></tr>
+                    <tr><td><strong>Pod Memory Waste:</strong></td><td class="text-info">${formatNumber(nodepool.pod_mem_waste_GB || 0)} GB</td></tr>
+                </table>
+            </div>
+            <div class="col-md-6">
+                <h6 class="fw-bold">Total Optimization Opportunity</h6>
+                <table class="table table-sm">
+                    <tr><td><strong>Total CPU Waste Potential:</strong></td><td class="text-primary fw-bold">${formatNumber(totalCpuWaste)} cores</td></tr>
+                    <tr><td><strong>Total Memory Waste Potential:</strong></td><td class="text-primary fw-bold">${formatNumber(totalMemWaste)} GB</td></tr>
+                </table>
+            </div>
+        </div>
+        <div class="row mt-3">
+            <div class="col-12">
+                <div class="alert alert-info">
+                    <h6><i class="fas fa-lightbulb me-2"></i>Optimization Recommendations</h6>
+                    <ul class="mb-0">
+                        ${totalCpuWaste > 10 ? '<li>High CPU waste detected - consider right-sizing pods or scaling down nodes</li>' : ''}
+                        ${totalMemWaste > 50 ? '<li>High memory waste detected - review pod memory requests</li>' : ''}
+                        ${(nodepool.cpu_over_requested || 0) > 0 ? '<li>CPU over-requested - risk of scheduling failures</li>' : ''}
+                        ${(nodepool.mem_over_requested_GB || 0) > 0 ? '<li>Memory over-requested - risk of OOM kills</li>' : ''}
+                        <li>Monitor actual resource usage vs requests</li>
+                        <li>Consider using Vertical Pod Autoscaler (VPA)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    $('#nodepoolDetailContent').html(content);
+    $('#nodepoolDetailModal').modal('show');
+}
+
+function exportData() {
+    if (currentData.length === 0) {
+        alert('No data to export');
+        return;
+    }
+    
+    const csv = convertToCSV(currentData);
+    downloadCSV(csv, 'nodepools_analysis.csv');
+}
+
+function convertToCSV(data) {
+    if (data.length === 0) return '';
+    
+    const headers = Object.keys(data[0]);
+    const csvContent = [
+        headers.join(','),
+        ...data.map(row => headers.map(header => {
+            const value = row[header];
+            return typeof value === 'string' ? `"${value}"` : value;
+        }).join(','))
+    ].join('\n');
+    
+    return csvContent;
+}
+
+function downloadCSV(csv, filename) {
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.setAttribute('hidden', '');
+    a.setAttribute('href', url);
+    a.setAttribute('download', filename);
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+}
+</script>
+{% endblock %}

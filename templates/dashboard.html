@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Kubernetes Resource Analysis{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="display-4 text-center mb-4">
+            <i class="fas fa-chart-line text-primary me-3"></i>
+            Kubernetes Resource Analysis Dashboard
+        </h1>
+        <p class="lead text-center text-muted">
+            Comprehensive analysis of cluster resource utilization, waste, and optimization opportunities
+        </p>
+    </div>
+</div>
+
+<!-- Summary Metrics -->
+<div class="row mb-5">
+    <div class="col-lg-3 col-md-6">
+        <div class="metric-card primary">
+            <div class="metric-value">{{ "{:,.0f}".format(stats.total_nodes or 0) }}</div>
+            <div class="metric-label">Total Nodes</div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6">
+        <div class="metric-card info">
+            <div class="metric-value">{{ "{:,.0f}".format(stats.total_pods or 0) }}</div>
+            <div class="metric-label">Total Pods</div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6">
+        <div class="metric-card success">
+            <div class="metric-value">{{ "{:,.0f}".format(stats.total_cpu_capacity or 0) }}</div>
+            <div class="metric-label">CPU Cores</div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6">
+        <div class="metric-card success">
+            <div class="metric-value">{{ "{:,.0f}".format(stats.total_mem_capacity or 0) }}</div>
+            <div class="metric-label">Memory (GB)</div>
+        </div>
+    </div>
+</div>
+
+<!-- Resource Efficiency Metrics -->
+<div class="row mb-5">
+    <div class="col-lg-3 col-md-6">
+        <div class="metric-card warning">
+            <div class="metric-value">{{ "{:,.0f}".format(stats.total_cpu_unutilized or 0) }}</div>
+            <div class="metric-label">CPU Wasted</div>
+            <small class="d-block mt-1">{{ "{:.1f}%".format((stats.total_cpu_unutilized or 0) / (stats.total_cpu_capacity or 1) * 100) }} of capacity</small>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6">
+        <div class="metric-card warning">
+            <div class="metric-value">{{ "{:,.0f}".format(stats.total_mem_unutilized or 0) }}</div>
+            <div class="metric-label">Memory Wasted (GB)</div>
+            <small class="d-block mt-1">{{ "{:.1f}%".format((stats.total_mem_unutilized or 0) / (stats.total_mem_capacity or 1) * 100) }} of capacity</small>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6">
+        <div class="metric-card danger">
+            <div class="metric-value">{{ "{:,.0f}".format(stats.total_cpu_over_requested or 0) }}</div>
+            <div class="metric-label">CPU Over-requested</div>
+            <small class="d-block mt-1">Scheduling Risk</small>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6">
+        <div class="metric-card danger">
+            <div class="metric-value">{{ "{:,.0f}".format(stats.total_mem_over_requested or 0) }}</div>
+            <div class="metric-label">Memory Over-requested (GB)</div>
+            <small class="d-block mt-1">OOM Risk</small>
+        </div>
+    </div>
+</div>
+
+<!-- Problem Categories -->
+<div class="row mb-5">
+    <div class="col-lg-3 col-md-6">
+        <div class="card text-center border-danger">
+            <div class="card-body">
+                <i class="fas fa-exclamation-triangle fa-3x text-danger mb-3"></i>
+                <h3 class="text-danger">{{ stats.over_utilized_nodes or 0 }}</h3>
+                <p class="card-text">Over-utilized Nodes</p>
+                <a href="{{ url_for('nodes_view') }}?type=over_utilized" class="btn btn-danger">View Details</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6">
+        <div class="card text-center border-warning">
+            <div class="card-body">
+                <i class="fas fa-balance-scale fa-3x text-warning mb-3"></i>
+                <h3 class="text-warning">{{ stats.imbalanced_nodes or 0 }}</h3>
+                <p class="card-text">Imbalanced Nodes</p>
+                <a href="{{ url_for('nodes_view') }}?type=imbalanced" class="btn btn-warning">View Details</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6">
+        <div class="card text-center border-info">
+            <div class="card-body">
+                <i class="fas fa-trash fa-3x text-info mb-3"></i>
+                <h3 class="text-info">{{ stats.waste_nodes or 0 }}</h3>
+                <p class="card-text">High Waste Nodes</p>
+                <a href="{{ url_for('nodes_view') }}?type=waste" class="btn btn-info">View Details</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6">
+        <div class="card text-center border-dark">
+            <div class="card-body">
+                <i class="fas fa-user-slash fa-3x text-dark mb-3"></i>
+                <h3 class="text-dark">{{ stats.bad_actors or 0 }}</h3>
+                <p class="card-text">Bad Actor Nodes</p>
+                <a href="{{ url_for('nodes_view') }}?type=bad_actors" class="btn btn-dark">View Details</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Pod Analysis -->
+<div class="row mb-5">
+    <div class="col-lg-4">
+        <div class="card text-center border-primary">
+            <div class="card-body">
+                <i class="fas fa-cube fa-3x text-primary mb-3"></i>
+                <h4 class="text-primary">Pod Optimization</h4>
+                <p class="text-muted">CPU Waste: {{ "{:,.1f}".format(stats.total_pod_cpu_waste or 0) }} cores</p>
+                <p class="text-muted">Memory Waste: {{ "{:,.1f}".format(stats.total_pod_mem_waste or 0) }} GB</p>
+                <a href="{{ url_for('pods_view') }}" class="btn btn-primary">Analyze Pods</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card text-center border-danger">
+            <div class="card-body">
+                <i class="fas fa-microchip fa-3x text-danger mb-3"></i>
+                <h4 class="text-danger">CPU-Heavy Pods</h4>
+                <p class="text-muted">{{ stats.cpu_heavy_pods or 0 }} pods</p>
+                <p class="text-muted">Causing CPU waste</p>
+                <a href="{{ url_for('pods_view') }}?type=cpu_heavy" class="btn btn-danger">View CPU-Heavy</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card text-center border-info">
+            <div class="card-body">
+                <i class="fas fa-memory fa-3x text-info mb-3"></i>
+                <h4 class="text-info">Memory-Heavy Pods</h4>
+                <p class="text-muted">{{ stats.memory_heavy_pods or 0 }} pods</p>
+                <p class="text-muted">Causing memory waste</p>
+                <a href="{{ url_for('pods_view') }}?type=memory_heavy" class="btn btn-info">View Memory-Heavy</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Section -->
+<div class="row mb-5">
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Node Utilization Patterns</h5>
+            </div>
+            <div class="card-body">
+                <div id="utilizationChart" style="height: 400px;"></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Pod Resource Patterns</h5>
+            </div>
+            <div class="card-body">
+                <div id="resourceChart" style="height: 400px;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-bolt me-2"></i>Quick Actions</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-lg-3 col-md-6 mb-3">
+                        <a href="{{ url_for('nodes_view') }}" class="btn btn-outline-primary btn-lg w-100">
+                            <i class="fas fa-server me-2"></i>Analyze Nodes
+                        </a>
+                    </div>
+                    <div class="col-lg-3 col-md-6 mb-3">
+                        <a href="{{ url_for('pods_view') }}" class="btn btn-outline-success btn-lg w-100">
+                            <i class="fas fa-cube me-2"></i>Optimize Pods
+                        </a>
+                    </div>
+                    <div class="col-lg-3 col-md-6 mb-3">
+                        <a href="{{ url_for('nodepools_view') }}" class="btn btn-outline-info btn-lg w-100">
+                            <i class="fas fa-layer-group me-2"></i>Review Pools
+                        </a>
+                    </div>
+                    <div class="col-lg-3 col-md-6 mb-3">
+                        <a href="{{ url_for('namespaces_view') }}" class="btn btn-outline-warning btn-lg w-100">
+                            <i class="fas fa-folder me-2"></i>Check Namespaces
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    // Load summary charts
+    $.get('/api/summary-charts', function(data) {
+        if (data.utilization_patterns) {
+            Plotly.newPlot('utilizationChart', data.utilization_patterns.data, data.utilization_patterns.layout, {responsive: true});
+        }
+        
+        if (data.resource_patterns) {
+            Plotly.newPlot('resourceChart', data.resource_patterns.data, data.resource_patterns.layout, {responsive: true});
+        }
+    }).fail(function() {
+        $('#utilizationChart').html('<p class="text-center text-muted">No data available for utilization patterns</p>');
+        $('#resourceChart').html('<p class="text-center text-muted">No data available for resource patterns</p>');
+    });
+});
+</script>
+{% endblock %}
